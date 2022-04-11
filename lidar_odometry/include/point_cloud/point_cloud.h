@@ -1,26 +1,73 @@
 #pragma once
 
+#include <opencv2/opencv.hpp>
+
 #include <iostream>
 #include <string>
 #include <vector>
+#include <memory>
+#include <sstream>
+#include <fstream>
+#include <math.h>
+#include <unordered_set>
 
+#define LOWEST_DISTANCE 0.3
 
-struct Point {
-    float x;
-    float y;
-    float z;
-};
+namespace std {
 
+    template <>
+    struct hash<cv::Point3f> {
+
+        std::size_t operator()(const cv::Point3f& point) const {
+        using std::size_t;
+        using std::hash;
+
+        return ((hash<float>()(point.x)
+                ^ (hash<float>()(point.y) << 1)) >> 1)
+                ^ (hash<float>()(point.z) << 1);
+        }
+    };
+}
 
 class PointCloud {
 public:
     PointCloud() = default;
-    PointCloud(const std::ifstream& file);
+    PointCloud(const PointCloud& other);
+    PointCloud(std::ifstream& ifs);
+    ~PointCloud() = default;
 
-    void read(const std::ifstream& file);
+    void read(std::ifstream& ifs);
+    void write(std::ofstream& ofs);
+    void print() {
+        // int i = 0;
+        // for(const auto& p : points) {
+        //     if(i++ == 100) {
+        //         break;
+        //     }
+        //     std::cout << p.x << " " << p.y << " " << p.z << "\n"; 
+        // }
+    }
 
-    void operator<<(const std::ifstream& file);
+    inline void add_point(const cv::Point3f& point) { points.insert(point); }
+    inline size_t size() const { return points.size(); }
+    inline const std::unordered_set<cv::Point3f>& get_points() const { return points; } 
+
+    friend std::ofstream& operator << (std::ofstream& ofs, const PointCloud& cloud);
+    friend std::ifstream& operator >> (std::ifstream& ifs, PointCloud& cloud);
+
+    std::unordered_set<cv::Point3f>::iterator begin() { return points.begin(); }
+    std::unordered_set<cv::Point3f>::iterator end() { return points.end(); }
+    std::unordered_set<cv::Point3f>::const_iterator cbegin() const { return points.cbegin(); }
+    std::unordered_set<cv::Point3f>::const_iterator cend() const { return points.cend(); }
 
 private:
-    std::vector<Point> points;
+    std::unordered_set<cv::Point3f> points;
 };
+
+std::ofstream& operator << (std::ofstream& ofs, const PointCloud& cloud);
+std::ifstream& operator >> (std::ifstream& ifs, PointCloud& cloud);
+inline bool operator == (const cv::Point3f& lhs, const cv::Point3f& rhs)    { return lhs.x == rhs.x && lhs.y == rhs.y && lhs.z == rhs.z; }
+
+inline float dist_from_origin(const cv::Point3f& point)                     { return sqrt(pow(point.x, 2) + pow(point.y, 2) + pow(point.z, 2)); }
+inline float point_to_point_distance(const cv::Point3f& point1, const cv::Point3f& point2) { return sqrt(pow(point1.x - point2.x, 2) + pow(point1.y - point2.y, 2) + pow(point1.z - point2.z, 2)); }
+
