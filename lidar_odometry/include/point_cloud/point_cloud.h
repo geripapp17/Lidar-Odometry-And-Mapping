@@ -38,15 +38,6 @@ public:
 
     void read(std::ifstream& ifs);
     void write(std::ofstream& ofs);
-    void print() {
-        // int i = 0;
-        // for(const auto& p : points) {
-        //     if(i++ == 100) {
-        //         break;
-        //     }
-        //     std::cout << p.x << " " << p.y << " " << p.z << "\n"; 
-        // }
-    }
 
     inline void add_point(const cv::Point3f& point) { points.insert(point); }
     inline size_t size() const { return points.size(); }
@@ -57,8 +48,8 @@ public:
 
     std::unordered_set<cv::Point3f>::iterator begin() { return points.begin(); }
     std::unordered_set<cv::Point3f>::iterator end() { return points.end(); }
-    std::unordered_set<cv::Point3f>::const_iterator cbegin() const { return points.cbegin(); }
-    std::unordered_set<cv::Point3f>::const_iterator cend() const { return points.cend(); }
+    std::unordered_set<cv::Point3f>::const_iterator begin() const { return points.cbegin(); }
+    std::unordered_set<cv::Point3f>::const_iterator end() const { return points.cend(); }
 
 private:
     std::unordered_set<cv::Point3f> points;
@@ -66,8 +57,10 @@ private:
 
 std::ofstream& operator << (std::ofstream& ofs, const PointCloud& cloud);
 std::ifstream& operator >> (std::ifstream& ifs, PointCloud& cloud);
-inline bool operator == (const cv::Point3f& lhs, const cv::Point3f& rhs)    { return lhs.x == rhs.x && lhs.y == rhs.y && lhs.z == rhs.z; }
+inline bool operator == (const cv::Point3f& lhs, const cv::Point3f& rhs) { return lhs.x == rhs.x && lhs.y == rhs.y && lhs.z == rhs.z; }
 
-inline float dist_from_origin(const cv::Point3f& point)                     { return sqrt(pow(point.x, 2) + pow(point.y, 2) + pow(point.z, 2)); }
+inline float dist_from_origin(const cv::Point3f& point) { return sqrt(pow(point.x, 2) + pow(point.y, 2) + pow(point.z, 2)); }
 inline float point_to_point_distance(const cv::Point3f& point1, const cv::Point3f& point2) { return sqrt(pow(point1.x - point2.x, 2) + pow(point1.y - point2.y, 2) + pow(point1.z - point2.z, 2)); }
 
+void write_ply(std::ofstream& ofs, const PointCloud& cloud);
+void write_ply(std::ofstream& ofs, const std::vector<PointCloud>& clusters);

@@ -16,19 +16,8 @@ void PointCloud::write(std::ofstream& ofs) { ofs << *this; }
 
 std::ofstream& operator << (std::ofstream& ofs, const PointCloud& cloud) {
 
-    ofs << "ply\n";
-    ofs << "format ascii 1.0\n";
-    ofs << "element vertex "<< cloud.points.size() << std::endl;
-    ofs << "property float x\n";
-    ofs << "property float y\n";
-    ofs << "property float z\n";
-    ofs << "property uchar red\n";
-    ofs << "property uchar green\n";
-    ofs << "property uchar blue\n";
-    ofs << "end_header\n";
-
     for(const auto& point : cloud.points) {
-        // ofs << point->x << " " << point->y << " " << point->z << " " << point->color.r << " " << point->color.g << " " << point->color.b << std::endl;
+        
     }
 
     return ofs;
@@ -51,4 +40,48 @@ std::ifstream& operator >> (std::ifstream& ifs, PointCloud& cloud) {
     }
 
     return ifs;
+}
+
+void write_ply(std::ofstream& ofs, const PointCloud& cloud) {
+
+    ofs << "ply\n";
+    ofs << "format ascii 1.0\n";
+    ofs << "element vertex "<< cloud.size() << std::endl;
+    ofs << "property float x\n";
+    ofs << "property float y\n";
+    ofs << "property float z\n";
+    ofs << "property uchar red\n";
+    ofs << "property uchar green\n";
+    ofs << "property uchar blue\n";
+    ofs << "end_header\n";
+}
+
+void write_ply(std::ofstream& ofs, const std::vector<PointCloud>& clusters) {
+
+    int sum_points = 0;
+    for(const auto& cluster : clusters) {
+        sum_points += cluster.size();
+    }
+
+    ofs << "ply\n";
+    ofs << "format ascii 1.0\n";
+    ofs << "element vertex "<< sum_points << std::endl;
+    ofs << "property float x\n";
+    ofs << "property float y\n";
+    ofs << "property float z\n";
+    ofs << "property uchar red\n";
+    ofs << "property uchar green\n";
+    ofs << "property uchar blue\n";
+    ofs << "end_header\n";
+
+    for(const auto& cluster : clusters) {
+
+        int r = (rand() + 100) % 256;
+        int g = (rand() + 100) % 256;
+        int b = (rand() + 100) % 256;
+
+        for(const auto& point : cluster) {
+            ofs << point.x << " " << point.y << " " << point.z << " " << r << " " << g << " " << b << "\n";
+        }
+    }
 }
