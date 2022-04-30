@@ -40,6 +40,9 @@ public:
     void write(std::ofstream& ofs);
 
     inline void add_point(const cv::Point3f& point) { points.insert(point); }
+    inline void remove_point(const cv::Point3f& point) { points.erase(point); }
+    inline void remove_point(std::unordered_set<cv::Point3f>::const_iterator it) { points.erase(it); }
+
     inline size_t size() const { return points.size(); }
     inline const std::unordered_set<cv::Point3f>& get_points() const { return points; } 
 
@@ -61,6 +64,10 @@ inline bool operator == (const cv::Point3f& lhs, const cv::Point3f& rhs) { retur
 
 inline float dist_from_origin(const cv::Point3f& point) { return sqrt(pow(point.x, 2) + pow(point.y, 2) + pow(point.z, 2)); }
 inline float point_to_point_distance(const cv::Point3f& point1, const cv::Point3f& point2) { return sqrt(pow(point1.x - point2.x, 2) + pow(point1.y - point2.y, 2) + pow(point1.z - point2.z, 2)); }
+
+std::vector<float> estimate_plane_implicit(const std::vector<cv::Point3f>& points);
+std::vector<cv::Point3f> ransac(const std::vector<cv::Point3f>& points, const int ransac_iter = 50, const float threshold = 0.2f);
+void remove_ground_plane(PointCloud& cloud);
 
 void write_ply(std::ofstream& ofs, const PointCloud& cloud);
 void write_ply(std::ofstream& ofs, const std::vector<PointCloud>& clusters);
