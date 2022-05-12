@@ -6,7 +6,7 @@ int main(int argc, char** argv) {
     Transformation body_to_body0;
     PointCloud prev_cloud;
 
-    for (int i = 10; i < 50; ++i) {
+    for (int i = 20; i < 22; ++i) {
 
         std::string path = "/home/geri/work/c++/Lidar-Odometry/data/default_path/test_fn" + std::to_string(i) + ".xyz";
 
@@ -38,7 +38,7 @@ int main(int argc, char** argv) {
         prev_cloud = cur_cloud;
 
         std::ofstream ofs{ "/home/geri/work/c++/Lidar-Odometry/output/map" + std::to_string(i) + ".ply", std::ofstream::out };
-        write_ply(ofs, map);
+        write_ply(ofs, map, { 255, 0, 0 });
         ofs.close();
     }
 

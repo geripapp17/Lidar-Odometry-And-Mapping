@@ -30,8 +30,8 @@ namespace std {
 }
 
 struct PointAssociation {
-    cv::Point3f p1;
-    cv::Point3f p2;
+    cv::Point3f source_point;
+    cv::Point3f dest_point;
 };
 
 struct Transformation {
@@ -41,6 +41,9 @@ struct Transformation {
 
 class PointCloud {
 public:
+    using iterator = std::unordered_set<cv::Point3f>::iterator;
+    using const_iterator = std::unordered_set<cv::Point3f>::const_iterator;
+
     PointCloud() = default;
     PointCloud(const PointCloud& other);
     PointCloud(std::ifstream& ifs);
@@ -58,13 +61,16 @@ public:
     inline bool empty() const       { return !size(); }
     inline const std::unordered_set<cv::Point3f>& get_points() const { return points; } 
 
+    PointCloud& operator = (const PointCloud& other);
     friend std::ofstream& operator << (std::ofstream& ofs, const PointCloud& cloud);
     friend std::ifstream& operator >> (std::ifstream& ifs, PointCloud& cloud);
 
-    inline auto begin()          { return points.begin(); }
-    inline auto end()            { return points.end(); }
-    inline auto begin() const    { return points.begin(); }
-    inline auto end() const      { return points.end(); }
+    inline iterator begin()          { return points.begin(); }
+    inline iterator end()            { return points.end(); }
+    inline const_iterator begin() const    { return points.begin(); }
+    inline const_iterator end() const      { return points.end(); }
+
+    std::unordered_set<cv::Point3f>& get_points() { return points; }
 
 private:
     std::unordered_set<cv::Point3f> points;
@@ -86,5 +92,5 @@ PointCloud remove_ground_plane(const PointCloud& cloud);
 void remove_ground_plane(PointCloud& cloud);
 PointCloud clean_cloud(const PointCloud& cloud);
 
-void write_ply(std::ofstream& ofs, const PointCloud& cloud);
+void write_ply(std::ofstream& ofs, const PointCloud& cloud, const cv::Point3i color);
 void write_ply(std::ofstream& ofs, const std::vector<PointCloud>& clusters);

@@ -18,6 +18,11 @@ void PointCloud::read(std::ifstream& ifs) { ifs >> *this; }
 
 void PointCloud::write(std::ofstream& ofs) { ofs << *this; }
 
+PointCloud& PointCloud::operator = (const PointCloud& other) {
+    points = other.points;
+    return *this;
+}
+
 std::ofstream& operator << (std::ofstream& ofs, const PointCloud& cloud) {
 
     for(const auto& point : cloud.points) {
@@ -46,7 +51,7 @@ std::ifstream& operator >> (std::ifstream& ifs, PointCloud& cloud) {
     return ifs;
 }
 
-void write_ply(std::ofstream& ofs, const PointCloud& cloud) {
+void write_ply(std::ofstream& ofs, const PointCloud& cloud, const cv::Point3i color) {
 
     ofs << "ply\n";
     ofs << "format ascii 1.0\n";
@@ -60,7 +65,7 @@ void write_ply(std::ofstream& ofs, const PointCloud& cloud) {
     ofs << "end_header\n";
 
     for(const auto& point : cloud) {
-        ofs << point.x << " " << point.y << " " << point.z << " " << 200 << " " << 200 << " " << 200 << "\n";
+        ofs << point.x << " " << point.y << " " << point.z << " " << color.x << " " << color.y << " " << color.z << "\n";
     }
 }
 
@@ -201,56 +206,85 @@ PointCloud clean_cloud(const PointCloud& cloud) {
     return result;
 }
 
-std::vector<PointAssociation> associate(const PointCloud& cloud1, const PointCloud& cloud2) {
+std::vector<PointAssociation> associate(const PointCloud& source_cloud, const PointCloud& dest_cloud) {
 
     std::vector<PointAssociation> associations;
 
-    for (const auto& p1 : cloud1) {
+    for (const auto& source_point : source_cloud) {
         float min_dist = std::numeric_limits<float>::max();
         cv::Point3f best_match;
         
-        for (const auto& p2 : cloud2) {
-            float dist = dist_from_origin(p1 - p2);
+        for (const auto& dest_point : dest_cloud) {
+            float dist = dist_from_origin(source_point - dest_point);
             if(dist < min_dist) {
                 min_dist = dist;
-                best_match = p2;
+                best_match = dest_point;
             }
         }
 
-        associations.push_back(PointAssociation {p1, best_match});
+        associations.push_back(PointAssociation {source_point, best_match});
     }
 
     return associations;
 }
 
-Transformation vanilla_icp(const PointCloud& prev_cloud, const PointCloud& cur_cloud) {
+Transformation vanilla_icp(const PointCloud& source_cloud, const PointCloud& dest_cloud) {
 
-    PointCloud prev_cleaned = clean_cloud(prev_cloud);
-    PointCloud cur_cleaned = clean_cloud(cur_cloud);
+    PointCloud source_cleaned = clean_cloud(source_cloud);
+    PointCloud dest_cleaned = clean_cloud(dest_cloud);
 
-    cv::Point3f mean_prev = prev_cleaned.center_of_mass();
-    cv::Point3f mean_cur = cur_cleaned.center_of_mass();
+    Transformation transf { cv::Mat::eye(3, 3, CV_32F), cv::Mat::zeros(3, 1, CV_32F) };
 
-    std::vector<PointAssociation> associations = associate(prev_cleaned, cur_cleaned);
+    std::ofstream ofs{ "/home/geri/work/c++/Lidar-Odometry/output/dest_cleaned.ply", std::ofstream::out };
+    write_ply(ofs, dest_cleaned, { 255, 0, 0 });
+    ofs.close();
 
-    cv::Mat H = cv::Mat::zeros(3,3, CV_32F);
-    for (const auto& association : associations) {
-        cv::Point3f p1_shifted = association.p1 - mean_prev;
-        cv::Point3f p2_shifted = association.p2 - mean_cur;
-        std::vector<float> p1_vec { p1_shifted.x, p1_shifted.y, p1_shifted.z };
-        std::vector<float> p2_vec { p2_shifted.x, p2_shifted.y, p2_shifted.z };
+    for (int i = 0; i < 10; ++i) {
 
-        cv::Mat p1_mat { p1_vec };
-        cv::Mat p2_mat { p2_vec };
+        std::ofstream ofs2{ "/home/geri/work/c++/Lidar-Odometry/output/source_cleaned" + std::to_string(i) + ".ply", std::ofstream::out };
+        write_ply(ofs2, source_cleaned, { 0 , 255, 0 });
+        ofs2.close();
 
-        H += (p1_mat * p2_mat.t());
+        cv::Point3f source_mean = source_cleaned.center_of_mass();
+        cv::Point3f dest_mean = dest_cleaned.center_of_mass();
+
+        std::vector<PointAssociation> associations = associate(source_cleaned, dest_cleaned);
+
+        cv::Mat H = cv::Mat::zeros(3,3, CV_32F);
+        for (const auto& association : associations) {
+            cv::Point3f source_point_shifted = association.source_point - source_mean;
+            cv::Point3f dest_point_shifted = association.dest_point - dest_mean;
+            std::vector<float> source_point_vec { source_point_shifted.x, source_point_shifted.y, source_point_shifted.z };
+            std::vector<float> dest_point_vec { dest_point_shifted.x, dest_point_shifted.y, dest_point_shifted.z };
+
+            cv::Mat source_point_mat { source_point_vec };
+            cv::Mat dest_point_mat { dest_point_vec };
+
+            H += (source_point_mat * dest_point_mat.t());
+        }
+
+        cv::SVD decomp(H, cv::SVD::FULL_UV);
+        cv::Mat R = decomp.vt.t() * decomp.u.t() ;
+
+        std::cout << R << std::endl << cv::Mat { dest_mean } << std::endl;
+
+        cv::Mat T = cv::Mat { dest_mean } - R * cv::Mat { source_mean };
+
+        std::cout << T << std::endl;
+
+        PointCloud tmp;
+        for(const auto& point : source_cleaned) {
+            cv::Mat point_mat { { point.x, point.y, point.z } };
+            cv::Mat point_transf = R * point_mat + T;
+            tmp.add_point(cv::Point3f { point_transf.at<float>(0), point_transf.at<float>(1), point_transf.at<float>(2) });
+        }
+
+        source_cleaned = tmp;
+        transf.R = R * transf.R;
+        transf.T = R * transf.T + T;
     }
 
-    cv::SVD decomp(H, cv::SVD::FULL_UV);
-    cv::Mat R = decomp.vt.t() * decomp.u.t();
-    cv::Mat T = cv::Mat { mean_prev } - R * cv::Mat { mean_cur };
-    
-    return Transformation { R, T };
+    return transf;
 }
 
 void remove_ground_plane(PointCloud& cloud) {
