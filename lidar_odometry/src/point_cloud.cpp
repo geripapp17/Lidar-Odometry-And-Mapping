@@ -6,7 +6,7 @@
 
 PointCloud::PointCloud(const PointCloud& other) {
 
-    points = other.points;
+    points = other.points.clone();
 }
 
 PointCloud::PointCloud(std::ifstream& ifs) {
@@ -19,100 +19,62 @@ void PointCloud::read(std::ifstream& ifs) { ifs >> *this; }
 void PointCloud::write(std::ofstream& ofs) { ofs << *this; }
 
 PointCloud& PointCloud::operator = (const PointCloud& other) {
-    points = other.points;
+    
+    points = other.points.clone();
     return *this;
 }
 
 std::ofstream& operator << (std::ofstream& ofs, const PointCloud& cloud) {
 
-    for(const auto& point : cloud.points) {
+    // for(const auto& point : cloud.points) {
         
-    }
+    // }
 
     return ofs;
 }
 
 std::ifstream& operator >> (std::ifstream& ifs, PointCloud& cloud) {
 
+    std::unordered_set<cv::Point3f> filteredPoints;
+
     std::string line;
     while(std::getline(ifs, line)) {
 
         std::istringstream iss{ line };
-        float x, y, z;
+        cv::Vec3f p;
 
-        iss >> x >> y >> z;
-        cv::Point3f p{ x, y, z };
-        
+        iss >> p[0] >> p[1] >> p[2];
+
         if(dist_from_origin(p) > LOWEST_DISTANCE) {
-            cloud.points.insert(p);
+            if(p[2] < -1.0) { filteredPoints.insert(p); }
+            else { cloud.add_point( cv::Mat{ p }.t() ); }
         }
+    }
+
+    remove_ground_plane(filteredPoints);
+    for(const auto& point : filteredPoints) {
+        cv::Vec3f p = { point.x, point.y, point.z };
+        cloud.add_point( cv::Mat{ p }.t() );
     }
 
     return ifs;
 }
 
-void write_ply(std::ofstream& ofs, const PointCloud& cloud, const cv::Point3i color) {
+void remove_ground_plane(std::unordered_set<cv::Point3f>& points) {
+    // TODO: Implement a more sophisticated algorithm for ground plane removal
 
-    ofs << "ply\n";
-    ofs << "format ascii 1.0\n";
-    ofs << "element vertex "<< cloud.size() << std::endl;
-    ofs << "property float x\n";
-    ofs << "property float y\n";
-    ofs << "property float z\n";
-    ofs << "property uchar red\n";
-    ofs << "property uchar green\n";
-    ofs << "property uchar blue\n";
-    ofs << "end_header\n";
+    srand(time(0));
 
-    for(const auto& point : cloud) {
-        ofs << point.x << " " << point.y << " " << point.z << " " << color.x << " " << color.y << " " << color.z << "\n";
-    }
-}
-
-void write_ply(std::ofstream& ofs, const std::vector<PointCloud>& clusters) {
-
-    int sum_points = 0;
-    for(const auto& cluster : clusters) {
-        sum_points += cluster.size();
+    std::vector<cv::Point3f> point_vec;
+    for(const auto& point : points) {
+        point_vec.push_back(point);
     }
 
-    ofs << "ply\n";
-    ofs << "format ascii 1.0\n";
-    ofs << "element vertex "<< sum_points << std::endl;
-    ofs << "property float x\n";
-    ofs << "property float y\n";
-    ofs << "property float z\n";
-    ofs << "property uchar red\n";
-    ofs << "property uchar green\n";
-    ofs << "property uchar blue\n";
-    ofs << "end_header\n";
+    std::vector<cv::Point3f> ground_plane = ransac(point_vec);
 
-    for(const auto& cluster : clusters) {
-
-        int r = (rand() + 100) % 256;
-        int g = (rand() + 100) % 256;
-        int b = (rand() + 100) % 256;
-
-        // for(const auto& point : cluster) {
-        //     ofs << point.x << " " << point.y << " " << point.z << " " << r << " " << g << " " << b << "\n";
-        // }
-        ofs << cluster.center_of_mass().x << " " << cluster.center_of_mass().y << " " << cluster.center_of_mass().z << " " << r << " " << g << " " << b << "\n";
-
+    for(const auto& point : ground_plane) {
+        points.erase(point);
     }
-}
-
-cv::Point3f PointCloud::center_of_mass() const {
-
-    cv::Point3f p0 = { 0.0, 0.0, 0.0 };
-    for (const auto& point : points) {
-        p0 += point;
-    }
-
-    p0.x /= points.size();
-    p0.y /= points.size();
-    p0.z /= points.size();
-
-    return p0;
 }
 
 std::vector<float> estimate_plane_implicit(const std::vector<cv::Point3f>& points) {
@@ -184,26 +146,37 @@ std::vector<cv::Point3f> ransac(const std::vector<cv::Point3f>& points, const in
     return final_inliers;
 }
 
-PointCloud clean_cloud(const PointCloud& cloud) {
+// PointCloud clean_cloud(const PointCloud& cloud) {
 
-    // Remove ground plane
-    PointCloud cloud_ground_removed = remove_ground_plane(cloud);
+//     // Remove ground plane
+//     PointCloud cloud_ground_removed = remove_ground_plane(cloud);
 
-    std::vector<PointCloud> clusters;
-    dbscan(cloud_ground_removed, 1.0, 4, clusters);
+//     std::vector<PointCloud> clusters;
+//     dbscan(cloud_ground_removed, 1.0, 4, clusters);
 
-    // Remove clusters which contain less points than a given threshold
-    clusters.erase(std::remove_if(clusters.begin(),
-                                clusters.end(),
-                                [](const PointCloud& cloud) { return cloud.size() <= 10; }),
-                   clusters.end());
+//     // Remove clusters which contain less points than a given threshold
+//     clusters.erase(std::remove_if(clusters.begin(),
+//                                 clusters.end(),
+//                                 [](const PointCloud& cloud) { return cloud.size() <= 10; }),
+//                    clusters.end());
 
-    PointCloud result;
-    for (const auto& cluster : clusters) {
-        result.add_point(cluster.center_of_mass());
+//     PointCloud result;
+//     for (const auto& cluster : clusters) {
+//         result.add_point(cluster.center_of_mass());
+//     }
+
+//     return result;
+// }
+
+cv::Vec3f PointCloud::center_of_mass() const {
+
+    cv::Vec3f p0 = { 0.0, 0.0, 0.0 };
+    for (int i = 0; i < size(); ++i) {
+        cv::Vec3f p = { points.at<float>(i, 0), points.at<float>(i, 1), points.at<float>(i, 2) };
+        p0 += p;
     }
 
-    return result;
+    return p0 / size();
 }
 
 std::vector<PointAssociation> associate(const PointCloud& source_cloud, const PointCloud& dest_cloud) {
@@ -228,27 +201,20 @@ std::vector<PointAssociation> associate(const PointCloud& source_cloud, const Po
     return associations;
 }
 
-Transformation vanilla_icp(const PointCloud& source_cloud, const PointCloud& dest_cloud) {
+cv::Mat vanilla_icp(const PointCloud& source_cloud, const PointCloud& dest_cloud) {
 
-    PointCloud source_cleaned = clean_cloud(source_cloud);
-    PointCloud dest_cleaned = clean_cloud(dest_cloud);
+    // PointCloud source_cleaned = clean_cloud(source_cloud);
+    // PointCloud dest_cleaned = clean_cloud(dest_cloud);
 
-    Transformation transf { cv::Mat::eye(3, 3, CV_32F), cv::Mat::zeros(3, 1, CV_32F) };
+    cv::Mat transf = cv::Mat::eye(4, 4, CV_32F);
 
-    std::ofstream ofs{ "/home/geri/work/c++/Lidar-Odometry/output/dest_cleaned.ply", std::ofstream::out };
-    write_ply(ofs, dest_cleaned, { 255, 0, 0 });
-    ofs.close();
 
     for (int i = 0; i < 10; ++i) {
 
-        std::ofstream ofs2{ "/home/geri/work/c++/Lidar-Odometry/output/source_cleaned" + std::to_string(i) + ".ply", std::ofstream::out };
-        write_ply(ofs2, source_cleaned, { 0 , 255, 0 });
-        ofs2.close();
+        cv::Point3f source_mean = source_cloud.center_of_mass();
+        cv::Point3f dest_mean = dest_cloud.center_of_mass();
 
-        cv::Point3f source_mean = source_cleaned.center_of_mass();
-        cv::Point3f dest_mean = dest_cleaned.center_of_mass();
-
-        std::vector<PointAssociation> associations = associate(source_cleaned, dest_cleaned);
+        std::vector<PointAssociation> associations = associate(source_cloud, dest_cloud);
 
         cv::Mat H = cv::Mat::zeros(3,3, CV_32F);
         for (const auto& association : associations) {
@@ -287,46 +253,23 @@ Transformation vanilla_icp(const PointCloud& source_cloud, const PointCloud& des
     return transf;
 }
 
-void remove_ground_plane(PointCloud& cloud) {
-    // TODO: Implement a more sophisticated algorithm for ground plane removal
+void write_ply(std::ofstream& ofs, const PointCloud& cloud, const cv::Point3i color) {
 
-    srand(time(0));
+    ofs << "ply\n";
+    ofs << "format ascii 1.0\n";
+    ofs << "element vertex "<< cloud.size() << std::endl;
+    ofs << "property float x\n";
+    ofs << "property float y\n";
+    ofs << "property float z\n";
+    ofs << "property uchar red\n";
+    ofs << "property uchar green\n";
+    ofs << "property uchar blue\n";
+    ofs << "end_header\n";
 
-    // Select points from the point cloud which z coordinate is less than -1
-    std::vector<cv::Point3f> points;
-    for(const auto& point : cloud) {
-        if(point.z < -1.0) {
-            points.push_back(point);
-        }
-    }
+    const cv::Mat points = cloud.get_points();
 
-    std::vector<cv::Point3f> ground_plane = ransac(points);
-    
-    for(const auto& point : ground_plane) {
-        cloud.remove_point(point);
+    for(int i = 0; i < cloud.size(); ++i) {
+        ofs << points.at<float>(i, 0) << " " << points.at<float>(i, 1) << " " << points.at<float>(i, 2) << " " << color.x << " " << color.y << " " << color.z << "\n";
     }
 }
 
-PointCloud remove_ground_plane(const PointCloud& cloud) {
-    // TODO: Implement a more sophisticated algorithm for ground plane removal
-
-    PointCloud result = cloud;
-
-    srand(time(0));
-
-    // Select points from the point cloud which z coordinate is less than -1
-    std::vector<cv::Point3f> points;
-    for(const auto& point : result) {
-        if(point.z < -1.0) {
-            points.push_back(point);
-        }
-    }
-
-    std::vector<cv::Point3f> ground_plane = ransac(points);
-    
-    for(const auto& point : ground_plane) {
-        result.remove_point(point);
-    }
-
-    return result;
-}

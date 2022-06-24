@@ -34,16 +34,8 @@ struct PointAssociation {
     cv::Point3f dest_point;
 };
 
-struct Transformation {
-    cv::Mat R;
-    cv::Mat T;
-};
-
 class PointCloud {
 public:
-    using iterator = std::unordered_set<cv::Point3f>::iterator;
-    using const_iterator = std::unordered_set<cv::Point3f>::const_iterator;
-
     PointCloud() = default;
     PointCloud(const PointCloud& other);
     PointCloud(std::ifstream& ifs);
@@ -52,45 +44,37 @@ public:
     void read(std::ifstream& ifs);
     void write(std::ofstream& ofs);
 
-    inline void add_point(const cv::Point3f& point)                                 { points.insert(point); }
-    inline void remove_point(const cv::Point3f& point)                              { points.erase(point); }
-    inline void remove_point(std::unordered_set<cv::Point3f>::const_iterator it)    { points.erase(it); }
+    inline void add_point(const cv::Mat& point) { points.push_back(point); };
+    // void remove_point(const cv::Point3f& point);  
+    // void remove_point(std::unordered_set<cv::Point3f>::const_iterator it); 
 
-    cv::Point3f center_of_mass() const;
-    inline size_t size() const      { return points.size(); }
-    inline bool empty() const       { return !size(); }
-    inline const std::unordered_set<cv::Point3f>& get_points() const { return points; } 
+    cv::Vec3f center_of_mass() const;
+    inline int size() const      { return points.rows; }
+    inline bool empty() const       { return points.empty(); }
+    const cv::Mat& get_points() const { return points; }
 
     PointCloud& operator = (const PointCloud& other);
     friend std::ofstream& operator << (std::ofstream& ofs, const PointCloud& cloud);
     friend std::ifstream& operator >> (std::ifstream& ifs, PointCloud& cloud);
 
-    inline iterator begin()          { return points.begin(); }
-    inline iterator end()            { return points.end(); }
-    inline const_iterator begin() const    { return points.begin(); }
-    inline const_iterator end() const      { return points.end(); }
-
-    std::unordered_set<cv::Point3f>& get_points() { return points; }
-
 private:
-    std::unordered_set<cv::Point3f> points;
+    cv::Mat points;
 };
 
 std::ofstream& operator << (std::ofstream& ofs, const PointCloud& cloud);
 std::ifstream& operator >> (std::ifstream& ifs, PointCloud& cloud);
 inline bool operator == (const cv::Point3f& lhs, const cv::Point3f& rhs) { return lhs.x == rhs.x && lhs.y == rhs.y && lhs.z == rhs.z; }
 
-inline float dist_from_origin(const cv::Point3f& point) { return sqrt(pow(point.x, 2) + pow(point.y, 2) + pow(point.z, 2)); }
-inline float point_to_point_distance(const cv::Point3f& point1, const cv::Point3f& point2) { return sqrt(pow(point1.x - point2.x, 2) + pow(point1.y - point2.y, 2) + pow(point1.z - point2.z, 2)); }
+inline float dist_from_origin(const cv::Vec3f& point) { return sqrt(pow(point[0], 2) + pow(point[1], 2) + pow(point[2], 2)); }
+// inline float point_to_point_distance(const cv::Vec3f& point1, const cv::Vec3f& point2) { return sqrt(pow(point1[0] - point2[0], 2) + pow(point1[1] - point2[1], 2) + pow(point1[2] - point2[2], 2)); }
 
 std::vector<float> estimate_plane_implicit(const std::vector<cv::Point3f>& points);
-Transformation vanilla_icp(const PointCloud& prev_cloud, const PointCloud& cur_cloud);
+cv::Mat vanilla_icp(const PointCloud& prev_cloud, const PointCloud& cur_cloud);
 std::vector<cv::Point3f> ransac(const std::vector<cv::Point3f>& points, const int ransac_iter = 50, const float threshold = 0.2f);
 
-std::vector<PointAssociation> associate(const PointCloud& cloud1, const PointCloud& cloud2);
+// std::vector<PointAssociation> associate(const PointCloud& cloud1, const PointCloud& cloud2);
 PointCloud remove_ground_plane(const PointCloud& cloud);
 void remove_ground_plane(PointCloud& cloud);
-PointCloud clean_cloud(const PointCloud& cloud);
+// PointCloud clean_cloud(const PointCloud& cloud);
 
 void write_ply(std::ofstream& ofs, const PointCloud& cloud, const cv::Point3i color);
-void write_ply(std::ofstream& ofs, const std::vector<PointCloud>& clusters);

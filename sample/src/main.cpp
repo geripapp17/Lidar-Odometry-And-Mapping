@@ -2,9 +2,8 @@
 
 int main(int argc, char** argv) {
 
-    PointCloud map;
-    Transformation body_to_body0;
-    PointCloud prev_cloud;
+    PointCloud map, prev_cloud;
+    cv::Mat body_to_body0 = cv::Mat::eye(4, 4, CV_32F);
 
     for (int i = 20; i < 50; ++i) {
 
@@ -17,22 +16,17 @@ int main(int argc, char** argv) {
         ifs.close();
 
         if (!prev_cloud.empty()) {
-            Transformation RT = vanilla_icp(prev_cloud, cur_cloud);
+            cv::Mat RT = vanilla_icp(prev_cloud, cur_cloud);
 
-            body_to_body0.R = RT.R * body_to_body0.R;
-            body_to_body0.T = RT.R * body_to_body0.T + RT.T;
+            body_to_body0 *= RT;
 
-            for (auto& point : cur_cloud) {
-                cv::Mat point_transformed  = body_to_body0.R * cv::Mat { point } + body_to_body0.T;
-                map.add_point(cv::Point3f { point_transformed.at<float>(0, 0), point_transformed.at<float>(1, 0), point_transformed.at<float>(2, 0) });
+            const auto& cur_cloud_points = cur_cloud.get_points();
+            for (int i = 0; i < cur_cloud.size(); ++i) {
+                cv::Vec3f point { cur_cloud_points.at<float>(i, 0), cur_cloud_points.at<float>(i, 1), cur_cloud_points.at<float>(i, 2) };
+                cv::Mat point_transformed  = body_to_body0 * cv::Mat { point };
+                point_transformed /= point_transformed.at<float>(3);
+                map.add_point( point_transformed );
             }
-        }
-        else {
-            for (auto& point : cur_cloud) {
-                map.add_point(cv::Point3f { point.x, point.y, point.z });
-            }
-            body_to_body0.R = cv::Mat::eye(3, 3, CV_32F);
-            body_to_body0.T = cv::Mat::zeros(3, 1, CV_32F);
         }
 
         prev_cloud = cur_cloud;
