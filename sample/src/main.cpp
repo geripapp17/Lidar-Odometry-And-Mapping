@@ -6,7 +6,7 @@ int main(int argc, char** argv) {
     Transformation body_to_body0;
     PointCloud prev_cloud;
 
-    for (int i = 20; i < 22; ++i) {
+    for (int i = 20; i < 50; ++i) {
 
         std::string path = "/home/geri/work/c++/Lidar-Odometry/data/default_path/test_fn" + std::to_string(i) + ".xyz";
 
@@ -32,15 +32,17 @@ int main(int argc, char** argv) {
                 map.add_point(cv::Point3f { point.x, point.y, point.z });
             }
             body_to_body0.R = cv::Mat::eye(3, 3, CV_32F);
-            body_to_body0.T = cv::Mat::eye(3, 1, CV_32F);
+            body_to_body0.T = cv::Mat::zeros(3, 1, CV_32F);
         }
 
         prev_cloud = cur_cloud;
 
         std::ofstream ofs{ "/home/geri/work/c++/Lidar-Odometry/output/map" + std::to_string(i) + ".ply", std::ofstream::out };
-        write_ply(ofs, map, { 255, 0, 0 });
+        write_ply(ofs, map, { (rand() + 100) % 256, (rand() + 100) % 256, (rand() + 100) % 256 });
         ofs.close();
     }
 
     return 0;
 }
+
+// https://github.com/ClayFlannigan/icp/blob/master/icp.py
