@@ -146,6 +146,79 @@ std::vector<cv::Point3f> ransac(const std::vector<cv::Point3f>& points, const in
     return final_inliers;
 }
 
+cv::Vec3f PointCloud::center_of_mass() const {
+
+    cv::Vec3f p0 = { 0.0, 0.0, 0.0 };
+    for (int i = 0; i < size(); ++i) {
+        cv::Vec3f p = { points.at<float>(i, 0), points.at<float>(i, 1), points.at<float>(i, 2) };
+        p0 += p;
+    }
+
+    return p0 / size();
+}
+
+std::vector<PointAssociation> associate(const PointCloud& source_cloud, const PointCloud& dest_cloud) {
+    // TODO: Use KD-Trees for association
+
+    std::vector<PointAssociation> associations;
+
+    const auto& points1 = source_cloud.get_points();
+    for (int i = 0; i < source_cloud.size(); ++i) {
+        float min_dist = std::numeric_limits<float>::max();
+        cv::Vec3f best_match;
+        
+        cv::Vec3f source_point = { points1.at<float>(i, 0), points1.at<float>(i, 1), points1.at<float>(i, 2) };
+
+        const auto& points2 = dest_cloud.get_points();
+        for (int j = 0; j < dest_cloud.size(); ++j) {
+            cv::Vec3f dest_point = { points2.at<float>(j, 0), points2.at<float>(j, 1), points2.at<float>(j, 2) };
+
+            float dist = dist_from_origin(source_point - dest_point);
+            if(dist < min_dist) {
+                min_dist = dist;
+                best_match = dest_point;
+            }
+        }
+
+        associations.push_back(PointAssociation { source_point, best_match });
+    }
+
+    return associations;
+}
+
+cv::Mat vanilla_icp(const PointCloud& source_cloud, const PointCloud& dest_cloud) {
+
+    // PointCloud source_cleaned = clean_cloud(source_cloud);
+    // PointCloud dest_cleaned = clean_cloud(dest_cloud);
+
+    cv::Mat transf = cv::Mat::eye(4, 4, CV_32F);
+
+    for (int i = 0; i < 10; ++i) {
+
+        cv::Vec3f source_mean = source_cloud.center_of_mass();
+        cv::Vec3f dest_mean = dest_cloud.center_of_mass();
+
+        std::vector<PointAssociation> associations = associate(source_cloud, dest_cloud);
+
+        cv::Mat H = cv::Mat::zeros(3,3, CV_32F);
+        for (const auto& association : associations) {
+            cv::Vec3f source_point_shifted = association.source_point - source_mean;
+            cv::Vec3f dest_point_shifted = association.dest_point - dest_mean;
+
+            cv::Mat source_point_mat { source_point_shifted };
+            cv::Mat dest_point_mat { dest_point_shifted };
+
+            H += (source_point_mat * dest_point_mat.t());
+        }
+
+        cv::SVD decomp(H, cv::SVD::FULL_UV);
+        cv::Mat R = decomp.vt.t() * decomp.u.t() ;
+        cv::Mat T = cv::Mat { dest_mean } - R * cv::Mat { source_mean };
+    }
+
+    return transf;
+}
+
 // PointCloud clean_cloud(const PointCloud& cloud) {
 
 //     // Remove ground plane
@@ -167,91 +240,6 @@ std::vector<cv::Point3f> ransac(const std::vector<cv::Point3f>& points, const in
 
 //     return result;
 // }
-
-cv::Vec3f PointCloud::center_of_mass() const {
-
-    cv::Vec3f p0 = { 0.0, 0.0, 0.0 };
-    for (int i = 0; i < size(); ++i) {
-        cv::Vec3f p = { points.at<float>(i, 0), points.at<float>(i, 1), points.at<float>(i, 2) };
-        p0 += p;
-    }
-
-    return p0 / size();
-}
-
-std::vector<PointAssociation> associate(const PointCloud& source_cloud, const PointCloud& dest_cloud) {
-
-    std::vector<PointAssociation> associations;
-
-    for (const auto& source_point : source_cloud) {
-        float min_dist = std::numeric_limits<float>::max();
-        cv::Point3f best_match;
-        
-        for (const auto& dest_point : dest_cloud) {
-            float dist = dist_from_origin(source_point - dest_point);
-            if(dist < min_dist) {
-                min_dist = dist;
-                best_match = dest_point;
-            }
-        }
-
-        associations.push_back(PointAssociation {source_point, best_match});
-    }
-
-    return associations;
-}
-
-cv::Mat vanilla_icp(const PointCloud& source_cloud, const PointCloud& dest_cloud) {
-
-    // PointCloud source_cleaned = clean_cloud(source_cloud);
-    // PointCloud dest_cleaned = clean_cloud(dest_cloud);
-
-    cv::Mat transf = cv::Mat::eye(4, 4, CV_32F);
-
-
-    for (int i = 0; i < 10; ++i) {
-
-        cv::Point3f source_mean = source_cloud.center_of_mass();
-        cv::Point3f dest_mean = dest_cloud.center_of_mass();
-
-        std::vector<PointAssociation> associations = associate(source_cloud, dest_cloud);
-
-        cv::Mat H = cv::Mat::zeros(3,3, CV_32F);
-        for (const auto& association : associations) {
-            cv::Point3f source_point_shifted = association.source_point - source_mean;
-            cv::Point3f dest_point_shifted = association.dest_point - dest_mean;
-            std::vector<float> source_point_vec { source_point_shifted.x, source_point_shifted.y, source_point_shifted.z };
-            std::vector<float> dest_point_vec { dest_point_shifted.x, dest_point_shifted.y, dest_point_shifted.z };
-
-            cv::Mat source_point_mat { source_point_vec };
-            cv::Mat dest_point_mat { dest_point_vec };
-
-            H += (source_point_mat * dest_point_mat.t());
-        }
-
-        cv::SVD decomp(H, cv::SVD::FULL_UV);
-        cv::Mat R = decomp.vt.t() * decomp.u.t() ;
-
-        std::cout << R << std::endl << cv::Mat { dest_mean } << std::endl;
-
-        cv::Mat T = cv::Mat { dest_mean } - R * cv::Mat { source_mean };
-
-        std::cout << T << std::endl;
-
-        PointCloud tmp;
-        for(const auto& point : source_cleaned) {
-            cv::Mat point_mat { { point.x, point.y, point.z } };
-            cv::Mat point_transf = R * point_mat + T;
-            tmp.add_point(cv::Point3f { point_transf.at<float>(0), point_transf.at<float>(1), point_transf.at<float>(2) });
-        }
-
-        source_cleaned = tmp;
-        transf.R = R * transf.R;
-        transf.T = R * transf.T + T;
-    }
-
-    return transf;
-}
 
 void write_ply(std::ofstream& ofs, const PointCloud& cloud, const cv::Point3i color) {
 

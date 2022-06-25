@@ -30,8 +30,8 @@ namespace std {
 }
 
 struct PointAssociation {
-    cv::Point3f source_point;
-    cv::Point3f dest_point;
+    cv::Vec3f source_point;
+    cv::Vec3f dest_point;
 };
 
 class PointCloud {
@@ -72,9 +72,8 @@ std::vector<float> estimate_plane_implicit(const std::vector<cv::Point3f>& point
 cv::Mat vanilla_icp(const PointCloud& prev_cloud, const PointCloud& cur_cloud);
 std::vector<cv::Point3f> ransac(const std::vector<cv::Point3f>& points, const int ransac_iter = 50, const float threshold = 0.2f);
 
-// std::vector<PointAssociation> associate(const PointCloud& cloud1, const PointCloud& cloud2);
-PointCloud remove_ground_plane(const PointCloud& cloud);
-void remove_ground_plane(PointCloud& cloud);
+std::vector<PointAssociation> associate(const PointCloud& cloud1, const PointCloud& cloud2);
+void remove_ground_plane(std::unordered_set<cv::Point3f>& cloud);
 // PointCloud clean_cloud(const PointCloud& cloud);
 
 void write_ply(std::ofstream& ofs, const PointCloud& cloud, const cv::Point3i color);
