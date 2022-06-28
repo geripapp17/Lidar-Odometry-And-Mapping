@@ -29,11 +29,6 @@ namespace std {
     };
 }
 
-struct PointAssociation {
-    cv::Vec3f source_point;
-    cv::Vec3f dest_point;
-};
-
 class PointCloud {
 public:
     PointCloud() = default;
@@ -52,6 +47,7 @@ public:
     inline int size() const      { return points.rows; }
     inline bool empty() const       { return points.empty(); }
     const cv::Mat& get_points() const { return points; }
+    void transform_cloud(const cv::Mat& T);
 
     PointCloud& operator = (const PointCloud& other);
     friend std::ofstream& operator << (std::ofstream& ofs, const PointCloud& cloud);
@@ -66,13 +62,13 @@ std::ifstream& operator >> (std::ifstream& ifs, PointCloud& cloud);
 inline bool operator == (const cv::Point3f& lhs, const cv::Point3f& rhs) { return lhs.x == rhs.x && lhs.y == rhs.y && lhs.z == rhs.z; }
 
 inline float dist_from_origin(const cv::Vec3f& point) { return sqrt(pow(point[0], 2) + pow(point[1], 2) + pow(point[2], 2)); }
-// inline float point_to_point_distance(const cv::Vec3f& point1, const cv::Vec3f& point2) { return sqrt(pow(point1[0] - point2[0], 2) + pow(point1[1] - point2[1], 2) + pow(point1[2] - point2[2], 2)); }
+inline float point_to_point_distance(const cv::Vec3f& point1, const cv::Vec3f& point2) { return sqrt(pow(point1[0] - point2[0], 2) + pow(point1[1] - point2[1], 2) + pow(point1[2] - point2[2], 2)); }
 
 std::vector<float> estimate_plane_implicit(const std::vector<cv::Point3f>& points);
-cv::Mat vanilla_icp(const PointCloud& prev_cloud, const PointCloud& cur_cloud);
+cv::Mat vanilla_icp(const PointCloud& prev_cloud, PointCloud cur_cloud);
 std::vector<cv::Point3f> ransac(const std::vector<cv::Point3f>& points, const int ransac_iter = 50, const float threshold = 0.2f);
 
-std::vector<PointAssociation> associate(const PointCloud& cloud1, const PointCloud& cloud2);
+cv::Mat associate(const PointCloud& cloud1, const PointCloud& cloud2);
 void remove_ground_plane(std::unordered_set<cv::Point3f>& cloud);
 // PointCloud clean_cloud(const PointCloud& cloud);
 

@@ -16,13 +16,13 @@ int main(int argc, char** argv) {
         ifs.close();
 
         if (!prev_cloud.empty()) {
-            cv::Mat RT = vanilla_icp(prev_cloud, cur_cloud);
+            cv::Mat T = vanilla_icp(prev_cloud, cur_cloud);
 
-            body_to_body0 *= RT;
+            body_to_body0 = T * body_to_body0;
 
             const auto& cur_cloud_points = cur_cloud.get_points();
             for (int i = 0; i < cur_cloud.size(); ++i) {
-                cv::Vec3f point { cur_cloud_points.at<float>(i, 0), cur_cloud_points.at<float>(i, 1), cur_cloud_points.at<float>(i, 2) };
+                cv::Vec4f point { cur_cloud_points.at<float>(i, 0), cur_cloud_points.at<float>(i, 1), cur_cloud_points.at<float>(i, 2), 1.0f };
                 cv::Mat point_transformed  = body_to_body0 * cv::Mat { point };
                 point_transformed /= point_transformed.at<float>(3);
                 map.add_point( point_transformed );

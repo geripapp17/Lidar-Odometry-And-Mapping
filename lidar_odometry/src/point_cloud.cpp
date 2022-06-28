@@ -157,66 +157,97 @@ cv::Vec3f PointCloud::center_of_mass() const {
     return p0 / size();
 }
 
-std::vector<PointAssociation> associate(const PointCloud& source_cloud, const PointCloud& dest_cloud) {
+void PointCloud::transform_cloud(const cv::Mat& T) {
+
+    cv::Mat tmp = points.clone().t();
+    tmp.push_back( cv::Mat::ones(1, tmp.cols, CV_32F) );
+    cv::Mat tmp2 = T * tmp;
+    tmp2.pop_back();
+
+    points = tmp2.clone();
+    cv::transpose(points, points);
+}
+
+cv::Mat associate(const PointCloud& source_cloud, const PointCloud& dest_cloud) {
     // TODO: Use KD-Trees for association
 
-    std::vector<PointAssociation> associations;
+    cv::Mat associated_dest;
 
     const auto& points1 = source_cloud.get_points();
     for (int i = 0; i < source_cloud.size(); ++i) {
         float min_dist = std::numeric_limits<float>::max();
-        cv::Vec3f best_match;
+        cv::Mat best_match;
         
-        cv::Vec3f source_point = { points1.at<float>(i, 0), points1.at<float>(i, 1), points1.at<float>(i, 2) };
+        cv::Vec3f p1 { points1.at<float>(i, 0), points1.at<float>(i, 1), points1.at<float>(i, 2) };
+        cv::Mat source_point { p1 };
 
         const auto& points2 = dest_cloud.get_points();
         for (int j = 0; j < dest_cloud.size(); ++j) {
-            cv::Vec3f dest_point = { points2.at<float>(j, 0), points2.at<float>(j, 1), points2.at<float>(j, 2) };
+            cv::Vec3f p2 { points2.at<float>(j, 0), points2.at<float>(j, 1), points2.at<float>(j, 2) };
+            cv::Mat dest_point { p2 };
 
-            float dist = dist_from_origin(source_point - dest_point);
+            float dist = point_to_point_distance(p1, p2);
             if(dist < min_dist) {
                 min_dist = dist;
-                best_match = dest_point;
+                best_match = dest_point.clone();
             }
         }
 
-        associations.push_back(PointAssociation { source_point, best_match });
+        associated_dest.push_back( best_match.t() );
     }
 
-    return associations;
+    return associated_dest;
 }
 
-cv::Mat vanilla_icp(const PointCloud& source_cloud, const PointCloud& dest_cloud) {
+cv::Mat vanilla_icp(const PointCloud& dest_cloud, PointCloud source_cloud) {
 
     // PointCloud source_cleaned = clean_cloud(source_cloud);
     // PointCloud dest_cleaned = clean_cloud(dest_cloud);
 
-    cv::Mat transf = cv::Mat::eye(4, 4, CV_32F);
+    cv::Mat T = cv::Mat::eye(4, 4, CV_32F);
 
-    for (int i = 0; i < 10; ++i) {
+    for (int i = 0; i < 5; ++i) {
 
-        cv::Vec3f source_mean = source_cloud.center_of_mass();
-        cv::Vec3f dest_mean = dest_cloud.center_of_mass();
+        cv::Vec3f src_mean = source_cloud.center_of_mass();
+        cv::Vec3f dst_mean = dest_cloud.center_of_mass();
 
-        std::vector<PointAssociation> associations = associate(source_cloud, dest_cloud);
-
-        cv::Mat H = cv::Mat::zeros(3,3, CV_32F);
-        for (const auto& association : associations) {
-            cv::Vec3f source_point_shifted = association.source_point - source_mean;
-            cv::Vec3f dest_point_shifted = association.dest_point - dest_mean;
-
-            cv::Mat source_point_mat { source_point_shifted };
-            cv::Mat dest_point_mat { dest_point_shifted };
-
-            H += (source_point_mat * dest_point_mat.t());
+        cv::Mat source_mean;
+        for(int i = 0; i < source_cloud.size(); ++i) {
+            source_mean.push_back( cv::Mat { src_mean }.t() );
         }
+
+        cv::Mat associated_dest = associate(source_cloud, dest_cloud);
+
+        cv::Mat dest_mean;
+        for(int i = 0; i < associated_dest.rows; ++i) {
+            dest_mean.push_back( cv::Mat { dst_mean }.t() );
+        }
+
+        cv::Mat src = (source_cloud.get_points() - source_mean).t();
+        cv::Mat dst = (associated_dest - dest_mean);
+        cv::Mat H = src * dst;
 
         cv::SVD decomp(H, cv::SVD::FULL_UV);
         cv::Mat R = decomp.vt.t() * decomp.u.t() ;
-        cv::Mat T = cv::Mat { dest_mean } - R * cv::Mat { source_mean };
+        cv::Mat t = cv::Mat { dst_mean } - R * cv::Mat { src_mean };
+
+        cv::Mat T_new = cv::Mat::eye(4, 4, CV_32F);
+        cv::Mat aux_R = T_new.rowRange(0, 3).colRange(0, 3);
+        cv::Mat aux_t = T_new.rowRange(0, 3).col(3);
+
+        // std::cout << T_new << "\n\n" << R << "\n\n" << t << "\n\n";
+
+        R.copyTo(aux_R);
+        t.copyTo(aux_t);
+
+        // std::cout << T_new << "\n\n";
+
+        T = T_new * T;
+
+        source_cloud.transform_cloud(T);
     }
 
-    return transf;
+    return T;
 }
 
 // PointCloud clean_cloud(const PointCloud& cloud) {
