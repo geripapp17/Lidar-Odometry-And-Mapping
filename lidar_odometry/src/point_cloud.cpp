@@ -60,8 +60,29 @@ std::ifstream& operator >> (std::ifstream& ifs, PointCloud& cloud) {
     return ifs;
 }
 
+cv::Vec3f PointCloud::center_of_mass() const {
+
+    cv::Vec3f p0 = { 0.0, 0.0, 0.0 };
+    for (int i = 0; i < size(); ++i) {
+        cv::Vec3f p = { points.at<float>(i, 0), points.at<float>(i, 1), points.at<float>(i, 2) };
+        p0 += p;
+    }
+
+    return p0 / size();
+}
+
+void PointCloud::transform_cloud(const cv::Mat& T) {
+
+    cv::Mat tmp = points.clone().t();
+    tmp.push_back( cv::Mat::ones(1, tmp.cols, CV_32F) );
+    cv::Mat tmp2 = T * tmp;
+    tmp2.pop_back();
+    cv::transpose(tmp2, tmp2);
+
+    points = tmp2.clone();
+}
+
 void remove_ground_plane(std::unordered_set<cv::Point3f>& points) {
-    // TODO: Implement a more sophisticated algorithm for ground plane removal
 
     srand(time(0));
 
@@ -70,8 +91,10 @@ void remove_ground_plane(std::unordered_set<cv::Point3f>& points) {
         point_vec.push_back(point);
     }
 
+    // Select points that are part of the ground plane.
     std::vector<cv::Point3f> ground_plane = ransac(point_vec);
 
+    // Remove ground points from the points which were possible ground points.
     for(const auto& point : ground_plane) {
         points.erase(point);
     }
@@ -146,34 +169,13 @@ std::vector<cv::Point3f> ransac(const std::vector<cv::Point3f>& points, const in
     return final_inliers;
 }
 
-cv::Vec3f PointCloud::center_of_mass() const {
-
-    cv::Vec3f p0 = { 0.0, 0.0, 0.0 };
-    for (int i = 0; i < size(); ++i) {
-        cv::Vec3f p = { points.at<float>(i, 0), points.at<float>(i, 1), points.at<float>(i, 2) };
-        p0 += p;
-    }
-
-    return p0 / size();
-}
-
-void PointCloud::transform_cloud(const cv::Mat& T) {
-
-    cv::Mat tmp = points.clone().t();
-    tmp.push_back( cv::Mat::ones(1, tmp.cols, CV_32F) );
-    cv::Mat tmp2 = T * tmp;
-    tmp2.pop_back();
-
-    points = tmp2.clone();
-    cv::transpose(points, points);
-}
-
 cv::Mat associate(const PointCloud& source_cloud, const PointCloud& dest_cloud) {
-    // TODO: Use KD-Trees for association
 
     cv::Mat associated_dest;
 
     const auto& points1 = source_cloud.get_points();
+    const auto& points2 = dest_cloud.get_points();
+
     for (int i = 0; i < source_cloud.size(); ++i) {
         float min_dist = std::numeric_limits<float>::max();
         cv::Mat best_match;
@@ -181,7 +183,6 @@ cv::Mat associate(const PointCloud& source_cloud, const PointCloud& dest_cloud) 
         cv::Vec3f p1 { points1.at<float>(i, 0), points1.at<float>(i, 1), points1.at<float>(i, 2) };
         cv::Mat source_point { p1 };
 
-        const auto& points2 = dest_cloud.get_points();
         for (int j = 0; j < dest_cloud.size(); ++j) {
             cv::Vec3f p2 { points2.at<float>(j, 0), points2.at<float>(j, 1), points2.at<float>(j, 2) };
             cv::Mat dest_point { p2 };
@@ -204,27 +205,26 @@ cv::Mat vanilla_icp(const PointCloud& dest_cloud, PointCloud source_cloud) {
     // PointCloud source_cleaned = clean_cloud(source_cloud);
     // PointCloud dest_cleaned = clean_cloud(dest_cloud);
 
-    cv::Mat T = cv::Mat::eye(4, 4, CV_32F);
+    cv::Mat T = cv::Mat::eye(4, 4, CV_32F);     ///< Final transformation between the current and previous clouds.
 
-    for (int i = 0; i < 5; ++i) {
-
+    for (int i = 0; i < 25; ++i) {
         cv::Vec3f src_mean = source_cloud.center_of_mass();
         cv::Vec3f dst_mean = dest_cloud.center_of_mass();
 
-        cv::Mat source_mean;
+        auto& source_cloud_mat = source_cloud.get_points();
+        cv::Mat src;
         for(int i = 0; i < source_cloud.size(); ++i) {
-            source_mean.push_back( cv::Mat { src_mean }.t() );
+            src.push_back( (source_cloud_mat.row(i).colRange(0, 3) - cv::Mat { src_mean }.t()) );
         }
 
         cv::Mat associated_dest = associate(source_cloud, dest_cloud);
 
-        cv::Mat dest_mean;
+        cv::Mat dst;
         for(int i = 0; i < associated_dest.rows; ++i) {
-            dest_mean.push_back( cv::Mat { dst_mean }.t() );
+            dst.push_back( associated_dest.row(i).colRange(0, 3) - cv::Mat { dst_mean }.t() );
         }
 
-        cv::Mat src = (source_cloud.get_points() - source_mean).t();
-        cv::Mat dst = (associated_dest - dest_mean);
+        cv::transpose(src, src);
         cv::Mat H = src * dst;
 
         cv::SVD decomp(H, cv::SVD::FULL_UV);
@@ -235,15 +235,10 @@ cv::Mat vanilla_icp(const PointCloud& dest_cloud, PointCloud source_cloud) {
         cv::Mat aux_R = T_new.rowRange(0, 3).colRange(0, 3);
         cv::Mat aux_t = T_new.rowRange(0, 3).col(3);
 
-        // std::cout << T_new << "\n\n" << R << "\n\n" << t << "\n\n";
-
         R.copyTo(aux_R);
         t.copyTo(aux_t);
 
-        // std::cout << T_new << "\n\n";
-
-        T = T_new * T;
-
+        T = T * T_new;
         source_cloud.transform_cloud(T);
     }
 
@@ -272,11 +267,36 @@ cv::Mat vanilla_icp(const PointCloud& dest_cloud, PointCloud source_cloud) {
 //     return result;
 // }
 
-void write_ply(std::ofstream& ofs, const PointCloud& cloud, const cv::Point3i color) {
+void write_ply(const std::string path, const cv::Mat& cloud, const cv::Point3i color) {
+
+    int prev_cnt = 0;
+    std::ifstream ifs;
+
+    std::string out_path = path + "map.ply";
+    std::string new_path = path + "tmp.ply";
+
+    if(file_exists(path + "map.ply")) {
+        std::rename(out_path.c_str(), new_path.c_str());
+        ifs.open(path + "tmp.ply");
+
+        for (int i = 0; i < 10; ++i) {
+            std::string line;
+            std::getline(ifs, line);
+
+            if(2 == i) {
+                std::string tmp;
+                std::istringstream iss{ line };
+                iss >> tmp >> tmp >> tmp;
+                prev_cnt = stoi(tmp);
+            }
+        }
+    }
+
+    std::ofstream ofs{ out_path, std::ofstream::out };
 
     ofs << "ply\n";
     ofs << "format ascii 1.0\n";
-    ofs << "element vertex "<< cloud.size() << std::endl;
+    ofs << "element vertex "<< prev_cnt + cloud.rows << std::endl;
     ofs << "property float x\n";
     ofs << "property float y\n";
     ofs << "property float z\n";
@@ -285,10 +305,30 @@ void write_ply(std::ofstream& ofs, const PointCloud& cloud, const cv::Point3i co
     ofs << "property uchar blue\n";
     ofs << "end_header\n";
 
-    const cv::Mat points = cloud.get_points();
+    if(0 != prev_cnt) {
+        std::string line;
+        while(std::getline(ifs, line)) {
+            ofs << line << "\n";
+        }
 
-    for(int i = 0; i < cloud.size(); ++i) {
-        ofs << points.at<float>(i, 0) << " " << points.at<float>(i, 1) << " " << points.at<float>(i, 2) << " " << color.x << " " << color.y << " " << color.z << "\n";
+        std::remove(new_path.c_str());
     }
+
+    for(int i = 0; i < cloud.rows; ++i) {
+        ofs << cloud.at<float>(i, 0) << " " << cloud.at<float>(i, 1) << " " << cloud.at<float>(i, 2) << " " << color.x << " " << color.y << " " << color.z << "\n";
+    }
+
+    ofs.close();
 }
 
+bool file_exists(const std::string path) {
+
+    std::ifstream file { path };
+    if(file) {
+        file.close();
+        return true;
+    }
+
+    file.close();
+    return false;
+}
