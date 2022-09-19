@@ -6,7 +6,7 @@
 
 PointCloud::PointCloud(const PointCloud& other) {
 
-    points = other.points.clone();
+    m_points = other.m_points.clone();
 }
 
 PointCloud::PointCloud(std::ifstream& ifs) {
@@ -20,7 +20,7 @@ void PointCloud::write(std::ofstream& ofs) { ofs << *this; }
 
 PointCloud& PointCloud::operator = (const PointCloud& other) {
     
-    points = other.points.clone();
+    m_points = other.m_points.clone();
     return *this;
 }
 
@@ -60,11 +60,11 @@ std::ifstream& operator >> (std::ifstream& ifs, PointCloud& cloud) {
     return ifs;
 }
 
-cv::Vec3f PointCloud::center_of_mass() const {
+cv::Vec3f PointCloud::get_mean() const {
 
     cv::Vec3f p0 = { 0.0, 0.0, 0.0 };
     for (int i = 0; i < size(); ++i) {
-        cv::Vec3f p = { points.at<float>(i, 0), points.at<float>(i, 1), points.at<float>(i, 2) };
+        cv::Vec3f p = { m_points.at<float>(i, 0), m_points.at<float>(i, 1), m_points.at<float>(i, 2) };
         p0 += p;
     }
 
@@ -73,13 +73,13 @@ cv::Vec3f PointCloud::center_of_mass() const {
 
 void PointCloud::transform_cloud(const cv::Mat& T) {
 
-    cv::Mat tmp = points.clone().t();
+    cv::Mat tmp = m_points.clone().t();
     tmp.push_back( cv::Mat::ones(1, tmp.cols, CV_32F) );
     cv::Mat tmp2 = T * tmp;
     tmp2.pop_back();
     cv::transpose(tmp2, tmp2);
 
-    points = tmp2.clone();
+    m_points = tmp2.clone();
 }
 
 void remove_ground_plane(std::unordered_set<cv::Point3f>& points) {
@@ -208,8 +208,8 @@ cv::Mat vanilla_icp(const PointCloud& dest_cloud, PointCloud source_cloud) {
     cv::Mat T = cv::Mat::eye(4, 4, CV_32F);     ///< Final transformation between the current and previous clouds.
 
     for (int i = 0; i < 25; ++i) {
-        cv::Vec3f src_mean = source_cloud.center_of_mass();
-        cv::Vec3f dst_mean = dest_cloud.center_of_mass();
+        cv::Vec3f src_mean = source_cloud.get_mean();
+        cv::Vec3f dst_mean = dest_cloud.get_mean();
 
         auto& source_cloud_mat = source_cloud.get_points();
         cv::Mat src;
@@ -244,28 +244,6 @@ cv::Mat vanilla_icp(const PointCloud& dest_cloud, PointCloud source_cloud) {
 
     return T;
 }
-
-// PointCloud clean_cloud(const PointCloud& cloud) {
-
-//     // Remove ground plane
-//     PointCloud cloud_ground_removed = remove_ground_plane(cloud);
-
-//     std::vector<PointCloud> clusters;
-//     dbscan(cloud_ground_removed, 1.0, 4, clusters);
-
-//     // Remove clusters which contain less points than a given threshold
-//     clusters.erase(std::remove_if(clusters.begin(),
-//                                 clusters.end(),
-//                                 [](const PointCloud& cloud) { return cloud.size() <= 10; }),
-//                    clusters.end());
-
-//     PointCloud result;
-//     for (const auto& cluster : clusters) {
-//         result.add_point(cluster.center_of_mass());
-//     }
-
-//     return result;
-// }
 
 void write_ply(const std::string path, const cv::Mat& cloud, const cv::Point3i color) {
 

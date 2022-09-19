@@ -1,6 +1,6 @@
 ///
 /// @file point_cloud.h
-/// @author Gergo Papp (geri.papp17@gmail.com)
+/// @author Gergo Papp
 /// @brief 
 /// @date 2022-07-06
 /// 
@@ -68,70 +68,66 @@ public:
     ~PointCloud() = default;
 
     ///
-    /// @brief 
+    /// @brief Reads the input file
     /// 
-    /// @param ifs 
+    /// @param ifs Input file stream
     ///
     void read(std::ifstream& ifs);
     
     ///
-    /// @brief 
+    /// @brief Writes data to file
     /// 
-    /// @param ofs 
+    /// @param ofs Output file stream
     ///
     void write(std::ofstream& ofs);
 
     ///
-    /// @brief 
+    /// @brief Adds a single point to the PointCloud
     /// 
-    /// @param point 
+    /// @param point Point to be added to the PointCloud
     ///
-    inline void add_point(const cv::Mat& point) { points.push_back(point); };
-
-    // void remove_point(const cv::Point3f& point);  
-    // void remove_point(std::unordered_set<cv::Point3f>::const_iterator it); 
+    inline void add_point(const cv::Mat& point) { m_points.push_back(point); };
 
     ///
-    /// @brief 
+    /// @brief Calculates the mean of the PointCloud
     /// 
-    /// @return cv::Vec3f 
+    /// @return cv::Vec3f Mean of the PointCloud
     ///
-    cv::Vec3f center_of_mass() const;
+    cv::Vec3f get_mean() const;
 
     ///
-    /// @brief 
+    /// @brief Returns the number of points in the PointCloud
     /// 
-    /// @return int 
+    /// @return int Number of points
     ///
-    inline int size() const { return points.rows; }
+    inline int size() const { return m_points.rows; }
 
     ///
-    /// @brief 
+    /// @brief Returns if the cloud is empty or not
     /// 
-    /// @return true 
-    /// @return false 
+    /// @return bool
     ///
-    inline bool empty() const { return points.empty(); }
+    inline bool empty() const { return m_points.empty(); }
 
     ///
-    /// @brief Get the _points object
+    /// @brief Gets the m_points object
     /// 
-    /// @return const cv::Mat& 
+    /// @return const cv::Mat& Const reference to the m_points object
     ///
-    const cv::Mat& get_points() const { return points; }
+    const cv::Mat& get_points() const { return m_points; }
 
     ///
-    /// @brief 
+    /// @brief Transforms the PointCloud
     /// 
-    /// @param T 
+    /// @param T Transformation matrix
     ///
     void transform_cloud(const cv::Mat& T);
 
     ///
-    /// @brief 
+    /// @brief Copy assignment operator
     /// 
-    /// @param other 
-    /// @return PointCloud& 
+    /// @param other PointCloud which is going to be copied
+    /// @return PointCloud& Reference to the PointCloud on which the copy assignment was called
     ///
     PointCloud& operator = (const PointCloud& other);
 
@@ -139,113 +135,90 @@ public:
     friend std::ifstream& operator >> (std::ifstream& ifs, PointCloud& cloud);
 
 private:
-    cv::Mat points;     ///< 
+    cv::Mat m_points;     ///< Stores all of the points in a matrix format
 };
 
-///
-/// @brief 
-/// 
-/// @param ofs 
-/// @param cloud 
-/// @return std::ofstream& 
-///
 std::ofstream& operator << (std::ofstream& ofs, const PointCloud& cloud);
-
-///
-/// @brief 
-/// 
-/// @param ifs 
-/// @param cloud 
-/// @return std::ifstream& 
-///
 std::ifstream& operator >> (std::ifstream& ifs, PointCloud& cloud);
-
-///
-/// @brief 
-/// 
-/// @param lhs 
-/// @param rhs 
-/// @return 
-///
 inline bool operator == (const cv::Point3f& lhs, const cv::Point3f& rhs) { return lhs.x == rhs.x && lhs.y == rhs.y && lhs.z == rhs.z; }
 
 ///
-/// @brief 
+/// @brief Calculates the Euclidean Distance from origin
 /// 
-/// @param point 
-/// @return float 
+/// @param point Point in space
+/// @return float Euclidean Distance from origin
 ///
 inline float dist_from_origin(const cv::Vec3f& point) { return sqrt(pow(point[0], 2) + pow(point[1], 2) + pow(point[2], 2)); }
 
 ///
-/// @brief 
+/// @brief Calculates the Euclidean Distance between two points
 /// 
-/// @param point1 
-/// @param point2 
-/// @return float 
+/// @param point1 Point1 in space
+/// @param point2 Point2 in space
+/// @return float Euclidean Distance between two points
 ///
 inline float point_to_point_distance(const cv::Vec3f& point1, const cv::Vec3f& point2) { return sqrt(pow(point1[0] - point2[0], 2) + pow(point1[1] - point2[1], 2) + pow(point1[2] - point2[2], 2)); }
 
 ///
-/// @brief 
+/// @brief Estimates the implicit parameters of plane
 /// 
-/// @param points 
-/// @return std::vector<float> 
+/// @param points Vector of points which form a plane
+/// @return std::vector<float> Implicit parameters of plane
 ///
 std::vector<float> estimate_plane_implicit(const std::vector<cv::Point3f>& points);
 
 ///
-/// @brief 
+/// @brief Implementation of the basic ICP algorithm.
 /// 
-/// @param prev_cloud 
-/// @param cur_cloud 
-/// @return cv::Mat 
+/// @param prev_cloud Previous PointCloud
+/// @param cur_cloud Current PointCloud
+/// @return cv::Mat Transformation between the two clouds
 ///
 cv::Mat vanilla_icp(const PointCloud& prev_cloud, PointCloud cur_cloud);
 
 ///
-/// @brief 
+/// @brief Implementation of the RANSAC algorithm.
 /// 
-/// @param points 
-/// @param ransac_iter 
-/// @param threshold 
-/// @return std::vector<cv::Point3f> 
+/// @param points Input points of the algorithm
+/// @param ransac_iter Number of iterations
+/// @param threshold Threshold value for the algorithm
+/// @return std::vector<cv::Point3f> Vector of points of the final inliers
 ///
 std::vector<cv::Point3f> ransac(const std::vector<cv::Point3f>& points, const int ransac_iter = 50, const float threshold = 0.2f);
 
 ///
-/// @brief 
+/// @brief Implementation of smallest distance point to point association for ICP
 /// TODO: Use KD-Trees for association
 ///
-/// @param cloud1 
-/// @param cloud2 
-/// @return cv::Mat 
+/// @param cloud1 First PointCloud
+/// @param cloud2 Second PointCloud
+/// @return cv::Mat Associated points from the two PointClouds
 ///
 cv::Mat associate(const PointCloud& cloud1, const PointCloud& cloud2);
 
 ///
-/// @brief 
+/// @brief Removes the ground plane
 /// TODO: Implement a more sophisticated algorithm for ground plane removal
 ///
-/// @param cloud 
+/// @param cloud PointCloud from which to remove the ground plane
 ///
 void remove_ground_plane(std::unordered_set<cv::Point3f>& cloud);
 
 // PointCloud clean_cloud(const PointCloud& cloud);
 
 ///
-/// @brief 
+/// @brief Checks if file exists
 /// 
-/// @param path 
-/// @return 
+/// @param path Path to file
+/// @return bool
 ///
 bool file_exists(const std::string path);
 
 ///
-/// @brief 
+/// @brief Serializes PointCloud data to PLY file
 /// 
-/// @param path 
-/// @param cloud 
-/// @param color 
+/// @param path Path to output file
+/// @param cloud PointCloud to serialize
+/// @param color Color of points
 ///
 void write_ply(const std::string path, const cv::Mat& cloud, const cv::Point3i color);
